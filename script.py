@@ -20,8 +20,7 @@ db = SQLAlchemy(app)
 
 class User(db.Model):
     __tablename__ = 'users'
-    id = db.Column(db.Integer, primary_key=True)
-    uid = db.Column(db.String(12), unique=True, nullable=False)
+    uid = db.Column(db.String(12), unique=True, nullable=False, primary_key=True)
     ips = db.Column(db.Text)
     posts = db.relationship('Post', backref='user', lazy='dynamic')
     pushes = db.relationship('Push', backref='user', lazy='dynamic')
@@ -35,13 +34,12 @@ class User(db.Model):
 
 class Post(db.Model):
     __tablename__ = 'posts'
-    id = db.Column(db.Integer, primary_key=True)
-    pid = db.Column(db.String(20), unique=True, nullable=False)
+    pid = db.Column(db.String(20), unique=True, nullable=False, primary_key=True)
     title = db.Column(db.String(50))
     content = db.Column(db.Text)
     datetime = db.Column(db.DateTime)
     ip = db.Column(db.Text)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    user_id = db.Column(db.String(12), db.ForeignKey('users.uid'))
     pushes = db.relationship('Push', backref='post', lazy='dynamic')
     def __init__(self, pid, title, content, dt, ip=''):
         self.pid = pid
@@ -61,8 +59,8 @@ class Push(db.Model):
     datetime = db.Column(db.DateTime)
     floor = db.Column(db.Integer)
     ip = db.Column(db.Text)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    post_id = db.Column(db.Integer, db.ForeignKey('posts.id'))
+    user_id = db.Column(db.String(12), db.ForeignKey('users.uid'))
+    post_id = db.Column(db.String(20), db.ForeignKey('posts.pid'))
     def __init__(self, tag, content, dt, floor, ip=''):
         self.tag = tag
         self.content = content
@@ -76,7 +74,7 @@ class Push(db.Model):
 class Word(db.Model):
     __tablename__ = 'words'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.uid'))
+    user_id = db.Column(db.String(12), db.ForeignKey('users.uid'))
     content = db.Column(db.Text())
     pos = db.Column(db.String(20))
     day_count = db.Column(db.Text())
