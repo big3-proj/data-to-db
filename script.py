@@ -9,9 +9,6 @@ from tqdm import tqdm
 import sys
 from datetime import datetime
 
-ws = WS('ckipdata')
-pos = POS('ckipdata')
-
 pjdir = os.path.abspath(os.path.dirname(__file__))
 # Create a Flask APP
 app = Flask(__name__)
@@ -43,13 +40,15 @@ class Post(db.Model):
     title = db.Column(db.String(50))
     content = db.Column(db.Text)
     datetime = db.Column(db.DateTime)
+    ip = db.Column(db.Text)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     pushes = db.relationship('Push', backref='post', lazy='dynamic')
-    def __init__(self, pid, title, content, dt):
+    def __init__(self, pid, title, content, dt, ip=''):
         self.pid = pid
         self.title = title
         self.content = content
         self.datetime = datetime.strptime(dt, '%a %b %d %H:%M:%S %Y')
+        self.ip = ip
     def __repr__(self):
         return f'{self.pid}'
 
@@ -57,15 +56,19 @@ class Post(db.Model):
 class Push(db.Model):
     __tablename__ = 'pushes'
     id = db.Column(db.Integer, primary_key=True)
-    datetime = db.Column(db.DateTime)
+    tag = db.Column(db.String(1))
     content = db.Column(db.Text())
+    datetime = db.Column(db.DateTime)
     floor = db.Column(db.Integer)
+    ip = db.Column(db.Text)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     post_id = db.Column(db.Integer, db.ForeignKey('posts.id'))
-    def __init__(self, content, dt, floor):
+    def __init__(self, tag, content, dt, floor, ip=''):
+        self.tag = tag
         self.content = content
         self.datetime = datetime.strptime(dt, '%Y/%m/%d %H:%M')
         self.floor = floor
+        self.ip = ip
     def __repr__(self):
         return f'{self.post_id}, floor: {self.floor}'
 
@@ -121,7 +124,7 @@ def parse_data():
     day_of_the_year = -1
     for art in tqdm(data['articles'], desc=f'Parsing articles'):
         try:    # add post to DB
-            post = Post(art['article_id'], art['article_title'], art['content'] , art['date'])
+            post = Post(art['article_id'], art['article_title'], art['content'] , art['date'], art['ip'])
         except:
             continue
 
@@ -157,15 +160,40 @@ def parse_data():
         # add pushes to DB
         floor = 0
         for m in art['messages']:
+            # parse ipdatetime
+            push_ip = ''
+            push_datetime = ''
+            push_ipdatetime_list = m['push_ipdatetime'].split()
+            # check whether the push has ip and datetime or not
+            if len(push_ipdatetime_list) == 3: # both ip and datetime
+                push_ip = push_ipdatetime_list[0]
+                push_datetime = post.datetime.strftime('%Y')+'/'+push_ipdatetime_list[1]+' '+push_ipdatetime_list[2]
+            elif len(push_ipdatetime_list) == 2: # only datetime
+                # if no time data, set to 00:00
+                if len(push_ipdatetime_list[1]) == 1:
+                    push_ipdatetime_list[1] = '00:00'
+                push_datetime = post.datetime.strftime('%Y')+'/'+push_ipdatetime_list[0]+' '+push_ipdatetime_list[1]
+            else: # no datetime data
+                # use post's datetime for substitution
+                push_datetime = post.datetime.strftime('%Y/%m/%d %H:%M')
             try:
-                push = Push(m['push_content'], post.datetime.strftime('%Y')+'/'+m['push_ipdatetime'], floor)
+                push = Push(m['push_tag'], m['push_content'], push_datetime, floor, push_ip)
             except:
-                push = Push(m['push_content'], post.datetime.strftime('%Y/%m/%d %H:%M'), floor)
+                print(m['push_ipdatetime'])
             pusher = User.query.filter_by(uid=m['push_userid']).first()
             if pusher is None: pusher = User(m['push_userid'])
+
+            # if the push has ip, add to User
+            if push_ip:
+                if pusher.ips:
+                    pusher.ips += ';'
+                pusher.ips += push_ip
+
             pusher.pushes.append(push)
             post.pushes.append(push)
-            if m['push_userid'] not in users_sentences_in_day: users_sentences_in_day[m['push_userid']] = []
+
+            if m['push_userid'] not in users_sentences_in_day:
+                users_sentences_in_day[m['push_userid']] = []
             users_sentences_in_day[m['push_userid']].append(m['push_content'])
             floor += 1
         
@@ -174,10 +202,17 @@ def parse_data():
     tag_sentence(day_of_the_year, users_sentences_in_day)
 
 if __name__ == '__main__':
-    data = pd.read_json(f'{sys.argv[1]}')
-    db.create_all()
+    if os.path.isfile(f'{sys.argv[1]}'):
+        data = pd.read_json(f'{sys.argv[1]}')
 
-    parse_data()
+        ws = WS('ckipdata')
+        pos = POS('ckipdata')
 
-    del ws
-    del pos
+        db.create_all()
+
+        parse_data()
+
+        del ws
+        del pos
+    else:
+        print(f'File {sys.argv[1]} not found.')
