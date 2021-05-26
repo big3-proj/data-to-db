@@ -8,6 +8,7 @@ from ckiptagger import WS, POS
 from tqdm import tqdm
 import sys
 from datetime import datetime
+from time import time
 
 pjdir = os.path.abspath(os.path.dirname(__file__))
 # Create a Flask APP
@@ -111,7 +112,7 @@ def tag_sentence(day_of_the_year, users_sentences_in_day):
             user = User.query.filter_by(uid=uid).first()
             user.words.append(word)
         db.session.add(user)
-        db.session.commit()
+    db.session.commit()
 
 
 def parse_data():
@@ -128,7 +129,7 @@ def parse_data():
 
         # day changed, tag accumulated sentences, update day and reset dictionary
         if day_of_the_year != int(post.datetime.strftime('%j')):
-            tag_sentence(day_of_the_year, users_sentences_in_day)
+            # tag_sentence(day_of_the_year, users_sentences_in_day)
             day_of_the_year = int(post.datetime.strftime('%j'))
             users_sentences_in_day = {}
 
@@ -150,7 +151,6 @@ def parse_data():
 
         author.posts.append(post)
         db.session.add(author)
-        db.session.commit()
         if author_id not in users_sentences_in_day:
             users_sentences_in_day[author_id] = []
         users_sentences_in_day[author_id].append(art['content'])
@@ -177,7 +177,7 @@ def parse_data():
             try:
                 push = Push(m['push_tag'], m['push_content'], push_datetime, floor, push_ip)
             except:
-                print(m['push_ipdatetime'])
+                pass
             pusher = User.query.filter_by(uid=m['push_userid']).first()
             if pusher is None: pusher = User(m['push_userid'])
 
@@ -196,10 +196,11 @@ def parse_data():
             floor += 1
         
         db.session.add(post)
-        db.session.commit()
-    tag_sentence(day_of_the_year, users_sentences_in_day)
+    db.session.commit()
+    # tag_sentence(day_of_the_year, users_sentences_in_day)
 
 if __name__ == '__main__':
+    start = time()
     if os.path.isfile(f'{sys.argv[1]}'):
         data = pd.read_json(f'{sys.argv[1]}')
 
@@ -214,3 +215,4 @@ if __name__ == '__main__':
         del pos
     else:
         print(f'File {sys.argv[1]} not found.')
+    print(f'Total run time: {time()-start}')
