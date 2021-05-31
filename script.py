@@ -10,6 +10,7 @@ import sys
 from datetime import datetime
 from time import time
 
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 pjdir = os.path.abspath(os.path.dirname(__file__))
 # Create a Flask APP
 app = Flask(__name__)
@@ -99,29 +100,28 @@ def tag_word(content):
     return wp_list
 
 
-def tag_sentence(day_of_the_year, users_sentences_in_day):
-    for uid, sentence in tqdm(users_sentences_in_day.items(), desc=f'Tagging sentence'):
+def tag_sentence(day_of_the_year, users_sentences_in_post):
+    for uid, sentence in tqdm(users_sentences_in_post.items(), desc=f'Tagging sentence'):
         wp_list = tag_word(sentence)
+        user = User.query.filter_by(uid=uid).first()
         for w, p in wp_list:
-            word = Word.query.filter_by(content=w, user_id=uid).first()
-            if word is None: word = Word(w, p)
+            word = user.words.filter_by(content=w).first()
+            if word is None:
+                word = Word(w, p)
+                user.words.append(word)
             word_day_count = list(map(int, word.day_count.split(',')))
             word_day_count[0] += 1 # sum
             word_day_count[day_of_the_year] += 1
             word.day_count = ','.join(map(str, word_day_count))
-            user = User.query.filter_by(uid=uid).first()
-            user.words.append(word)
-        db.session.add(user)
-    db.session.commit()
 
 
 def parse_data():
     '''
         parse sentences in post, grouping by day & user
     '''
-    users_sentences_in_day = {}
     day_of_the_year = -1
     for art in tqdm(data['articles'], desc=f'Parsing articles'):
+        users_sentences_in_post = {}
         try:    # add post to DB
             post = Post(art['article_id'], art['article_title'], art['content'] , art['date'], art['ip'])
         except:
@@ -129,9 +129,7 @@ def parse_data():
 
         # day changed, tag accumulated sentences, update day and reset dictionary
         if day_of_the_year != int(post.datetime.strftime('%j')):
-            # tag_sentence(day_of_the_year, users_sentences_in_day)
             day_of_the_year = int(post.datetime.strftime('%j'))
-            users_sentences_in_day = {}
 
         # remove author nickname, the rest part is user id
         try:
@@ -151,9 +149,9 @@ def parse_data():
 
         author.posts.append(post)
         db.session.add(author)
-        if author_id not in users_sentences_in_day:
-            users_sentences_in_day[author_id] = []
-        users_sentences_in_day[author_id].append(art['content'])
+        if author_id not in users_sentences_in_post:
+            users_sentences_in_post[author_id] = []
+        users_sentences_in_post[author_id].append(art['content'])
 
         # add pushes to DB
         floor = 0
@@ -190,22 +188,22 @@ def parse_data():
             pusher.pushes.append(push)
             post.pushes.append(push)
 
-            if m['push_userid'] not in users_sentences_in_day:
-                users_sentences_in_day[m['push_userid']] = []
-            users_sentences_in_day[m['push_userid']].append(m['push_content'])
+            if m['push_userid'] not in users_sentences_in_post:
+                users_sentences_in_post[m['push_userid']] = []
+            users_sentences_in_post[m['push_userid']].append(m['push_content'])
             floor += 1
         
+        tag_sentence(day_of_the_year, users_sentences_in_post)
         db.session.add(post)
-    db.session.commit()
-    # tag_sentence(day_of_the_year, users_sentences_in_day)
+        db.session.commit()
 
 if __name__ == '__main__':
     start = time()
     if os.path.isfile(f'{sys.argv[1]}'):
         data = pd.read_json(f'{sys.argv[1]}')
 
-        ws = WS('ckipdata')
-        pos = POS('ckipdata')
+        ws = WS('ckipdata', disable_cuda=False)
+        pos = POS('ckipdata', disable_cuda=False)
 
         db.create_all()
 
