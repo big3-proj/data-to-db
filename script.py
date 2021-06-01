@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 from time import time
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 pjdir = os.path.abspath(os.path.dirname(__file__))
 # Create a Flask APP
 app = Flask(__name__)
@@ -103,7 +103,7 @@ def tag_word(content):
 def tag_sentence(day_of_the_year, users_sentences_in_post):
     for uid, sentence in tqdm(users_sentences_in_post.items(), desc=f'Tagging sentence'):
         wp_list = tag_word(sentence)
-        user = User.query.filter_by(uid=uid).first()
+        user = User.query.get(uid)
         for w, p in wp_list:
             word = user.words.filter_by(content=w).first()
             if word is None:
@@ -137,7 +137,7 @@ def parse_data():
         except:
             author_id = ''
         
-        author = User.query.filter_by(uid=author_id).first()
+        author = User.query.get(author_id)
         # if user is not exist in DB, create it, otherwise, store the ip address
         if author is None:
             author = User(author_id, art['ip'])
@@ -176,7 +176,7 @@ def parse_data():
                 push = Push(m['push_tag'], m['push_content'], push_datetime, floor, push_ip)
             except:
                 pass
-            pusher = User.query.filter_by(uid=m['push_userid']).first()
+            pusher = User.query.get(m['push_userid'])
             if pusher is None: pusher = User(m['push_userid'])
 
             # if the push has ip, add to User
@@ -199,11 +199,13 @@ def parse_data():
 
 if __name__ == '__main__':
     start = time()
-    if os.path.isfile(f'{sys.argv[1]}'):
-        data = pd.read_json(f'{sys.argv[1]}')
+    if os.path.isfile(f'../{sys.argv[1]}'):
+        data = pd.read_json(f'../{sys.argv[1]}')
 
-        ws = WS('ckipdata', disable_cuda=False)
-        pos = POS('ckipdata', disable_cuda=False)
+        # ws = WS('ckipdata', disable_cuda=False)
+        # pos = POS('ckipdata', disable_cuda=False)
+        ws = WS('../ckipdata')
+        pos = POS('../ckipdata')
 
         db.create_all()
 
