@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 from time import time
 
-# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 pjdir = os.path.abspath(os.path.dirname(__file__))
 # Create a Flask APP
 app = Flask(__name__)
@@ -80,6 +80,7 @@ class Word(db.Model):
     content = db.Column(db.Text())
     pos = db.Column(db.String(20))
     day_count = db.Column(db.Text())
+    __table_args__ = (db.Index('uid_word', 'user_id', 'content'),)
     def __init__(self, content, pos):
         self.content = content
         self.pos = pos
@@ -105,7 +106,7 @@ def tag_sentence(day_of_the_year, users_sentences_in_post):
         wp_list = tag_word(sentence)
         user = User.query.get(uid)
         for w, p in wp_list:
-            word = user.words.filter_by(content=w).first()
+            word = Word.query.filter_by(user_id=uid, content=w).first()
             if word is None:
                 word = Word(w, p)
                 user.words.append(word)
@@ -202,10 +203,10 @@ if __name__ == '__main__':
     if os.path.isfile(f'../{sys.argv[1]}'):
         data = pd.read_json(f'../{sys.argv[1]}')
 
-        # ws = WS('ckipdata', disable_cuda=False)
-        # pos = POS('ckipdata', disable_cuda=False)
-        ws = WS('../ckipdata')
-        pos = POS('../ckipdata')
+        ws = WS('../ckipdata', disable_cuda=False)
+        pos = POS('../ckipdata', disable_cuda=False)
+        # ws = WS('../ckipdata')
+        # pos = POS('../ckipdata')
 
         db.create_all()
 
